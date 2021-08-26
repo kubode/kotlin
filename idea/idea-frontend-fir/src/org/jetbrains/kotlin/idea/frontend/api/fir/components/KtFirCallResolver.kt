@@ -17,12 +17,12 @@ import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.references.FirSuperReference
 import org.jetbrains.kotlin.fir.references.impl.FirSimpleNamedReference
 import org.jetbrains.kotlin.fir.resolve.calls.FirErrorReferenceWithCandidate
+import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
-import org.jetbrains.kotlin.fir.types.ConeClassLikeType
-import org.jetbrains.kotlin.fir.types.ConeKotlinErrorType
-import org.jetbrains.kotlin.fir.types.classId
-import org.jetbrains.kotlin.fir.types.coneType
+import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
+import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.idea.fir.getCandidateSymbols
 import org.jetbrains.kotlin.idea.fir.isImplicitFunctionCall
 import org.jetbrains.kotlin.idea.fir.low.level.api.api.getOrBuildFir
@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.idea.frontend.api.fir.buildSymbol
 import org.jetbrains.kotlin.idea.frontend.api.symbols.*
 import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtSymbolWithMembers
 import org.jetbrains.kotlin.idea.frontend.api.tokens.ValidityToken
+import org.jetbrains.kotlin.idea.frontend.api.types.KtSubstitutor
 import org.jetbrains.kotlin.idea.frontend.api.withValidityAssertion
 import org.jetbrains.kotlin.idea.references.FirReferenceResolveHelper
 import org.jetbrains.kotlin.idea.references.readWriteAccess
@@ -76,7 +77,7 @@ internal class KtFirCallResolver(
                     val setterParameterSymbol = accessor.valueParameters.single().buildSymbol(firSymbolBuilder) as KtValueParameterSymbol
                     ktArgumentMapping[setterValue] = setterParameterSymbol
                 }
-                return KtFunctionCall(ktArgumentMapping, target, token)
+                return KtFunctionCall(ktArgumentMapping, target, KtSubstitutor.Empty(token), token)
             }
             else -> return null
         }
@@ -157,15 +158,41 @@ internal class KtFirCallResolver(
         }
         val callableId = functionSymbol?.callableId ?: return null
         return if (callableId in kotlinFunctionInvokeCallableIds) {
-            KtFunctionalTypeVariableCall(variableLikeSymbol, createArgumentMapping(), target, token)
+            // A fake override is always created for a function type with all types substituted properly inside the dispatch receiver. Hence
+            // there is no need for additional substitutor.
+            KtFunctionalTypeVariableCall(variableLikeSymbol, createArgumentMapping(), target, KtSubstitutor.Empty(token), token)
         } else {
-            KtVariableWithInvokeFunctionCall(variableLikeSymbol, createArgumentMapping(), target, token)
+            val substitutor = createSubstitutorFromTypeArguments(functionSymbol)
+            KtVariableWithInvokeFunctionCall(
+                variableLikeSymbol,
+                createArgumentMapping(),
+                target,
+                substitutor, token
+            )
         }
     }
 
     private fun FirFunctionCall.asSimpleFunctionCall(): KtFunctionCall? {
+        val calleeReference = this.calleeReference
         val target = calleeReference.createCallTarget() ?: return null
-        return KtFunctionCall(createArgumentMapping(), target, token)
+        val symbol = when (calleeReference) {
+            is FirResolvedNamedReference -> calleeReference.resolvedSymbol as? FirCallableSymbol<*>
+            is FirErrorNamedReference -> calleeReference.candidateSymbol as? FirCallableSymbol<*>
+            else -> null
+        } ?: return null
+        return KtFunctionCall(createArgumentMapping(), target, createSubstitutorFromTypeArguments(symbol), token)
+    }
+
+    private fun FirFunctionCall.createSubstitutorFromTypeArguments(functionSymbol: FirCallableSymbol<*>): KtSubstitutor {
+        val typeArgumentMap = mutableMapOf<FirTypeParameterSymbol, ConeKotlinType>()
+        for (i in typeArguments.indices) {
+            val type = typeArguments[i].safeAs<FirTypeProjectionWithVariance>()?.typeRef?.coneType
+            if (type != null) {
+                typeArgumentMap[functionSymbol.typeParameterSymbols[i]] = type
+            }
+        }
+        val coneSubstitutor = substitutorByMap(typeArgumentMap, rootModuleSession)
+        return firSymbolBuilder.typeBuilder.buildSubstitutor(coneSubstitutor)
     }
 
     private fun FirAnnotationCall.asAnnotationCall(): KtAnnotationCall? {
