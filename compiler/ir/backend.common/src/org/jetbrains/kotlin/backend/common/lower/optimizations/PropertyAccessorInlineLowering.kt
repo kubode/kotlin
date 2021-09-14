@@ -32,34 +32,53 @@ class PropertyAccessorInlineLowering(private val context: CommonBackendContext) 
 
         private val unitType = context.irBuiltIns.unitType
 
+        private fun canBeInlined(callee: IrSimpleFunction): Boolean {
+            val property = callee.correspondingPropertySymbol?.owner ?: return false
+
+            // Some devirtualization required here
+            if (!property.isSafeToInline) return false
+
+            val parent = property.parent
+            if (parent is IrClass) {
+                // TODO: temporary workarounds
+                if (parent.isExpect || property.isExpect) return false
+                if (parent.parent is IrExternalPackageFragment) return false
+                if (parent.isInline) return false
+            }
+            if (property.isEffectivelyExternal()) return false
+            return true
+        }
+
         override fun visitCall(expression: IrCall): IrExpression {
             expression.transformChildrenVoid(this)
 
             val callee = expression.symbol.owner
             val property = callee.correspondingPropertySymbol?.owner ?: return expression
 
-            // Some devirtualization required here
-            if (!property.isSafeToInline) return expression
+            if (!canBeInlined(callee)) return expression
 
-            val parent = property.parent
-            if (parent is IrClass) {
-                // TODO: temporary workarounds
-                if (parent.isExpect || property.isExpect) return expression
-                if (parent.parent is IrExternalPackageFragment) return expression
-                if (parent.isInline) return expression
+            var analyzedProperty = property
+            var analyzedCallee = callee
+            while (analyzedProperty.isFakeOverride) {
+                analyzedProperty = analyzedProperty.overriddenSymbols.singleOrNull()?.owner ?: return expression
+                analyzedCallee = analyzedCallee.overriddenSymbols.singleOrNull()?.owner ?: return expression
             }
-            if (property.isEffectivelyExternal()) return expression
+            assert(analyzedProperty == analyzedCallee.correspondingPropertySymbol?.owner)
 
-            val backingField = property.backingField ?: return expression
+            if (!canBeInlined(analyzedCallee)) return expression
 
-            if (property.isConst) {
+            val backingField = analyzedProperty.backingField ?: return expression
+
+            if (analyzedProperty.isConst) {
                 val initializer =
                     (backingField.initializer ?: error("Constant property has to have a backing field with initializer"))
                 val constExpression = initializer.expression.deepCopyWithSymbols()
                 val receiver = expression.dispatchReceiver
                 if (receiver != null && !receiver.isPure(true)) {
-                    val builder = context.createIrBuilder(expression.symbol,
-                            expression.startOffset, expression.endOffset)
+                    val builder = context.createIrBuilder(
+                        expression.symbol,
+                        expression.startOffset, expression.endOffset
+                    )
                     return builder.irBlock(expression) {
                         +receiver
                         +constExpression
@@ -71,11 +90,11 @@ class PropertyAccessorInlineLowering(private val context: CommonBackendContext) 
 
 
             if (property.getter === callee) {
-                return tryInlineSimpleGetter(expression, callee, backingField) ?: expression
+                return tryInlineSimpleGetter(expression, analyzedCallee, backingField) ?: expression
             }
 
             if (property.setter === callee) {
-                return tryInlineSimpleSetter(expression, callee, backingField) ?: expression
+                return tryInlineSimpleSetter(expression, analyzedCallee, backingField) ?: expression
             }
 
             return expression
