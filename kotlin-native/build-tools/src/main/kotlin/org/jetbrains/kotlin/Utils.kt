@@ -362,7 +362,7 @@ fun Project.mergeManifestsByTargets(source: File, destination: File) {
 
     check(mismatchedProperties.isEmpty()) {
         buildString {
-            appendln("Found mismatched properties while merging manifest files: $source -> $destination")
+            appendLine("Found mismatched properties while merging manifest files: $source -> $destination")
             mismatchedProperties.joinTo(this, "\n")
         }
     }

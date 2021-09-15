@@ -95,12 +95,12 @@ open class NightlyReporter: DefaultTask() {
         val externalWindowsJsonReport = loadReport("${project.rootDir.absolutePath}/$externalWindowsReport")
         val report = buildString {
             append("Mac OS ")
-            appendln(externalMacosJsonReport.statistics.oneLineReport)
+            appendLine(externalMacosJsonReport.statistics.oneLineReport)
             append("Linux ")
-            appendln(externalLinuxJsonReport.statistics.oneLineReport)
+            appendLine(externalLinuxJsonReport.statistics.oneLineReport)
             append("Windows ")
-            appendln(externalWindowsJsonReport.statistics.oneLineReport)
-            appendln(reportEpilogue())
+            appendLine(externalWindowsJsonReport.statistics.oneLineReport)
+            appendLine(reportEpilogue())
         }
         project.logger.info(report)
         if (doSlackSending())

@@ -73,14 +73,14 @@ open class CompareDistributionSignatures : DefaultTask() {
         val platformLibsDiff = computeDiff()
         if (platformLibsDiff.missingLibs.isNotEmpty()) {
             messageBuilder.apply {
-                appendln("Following platform libraries are missing in the new distro:")
-                platformLibsDiff.missingLibs.forEach { appendln(it) }
+                appendLine("Following platform libraries are missing in the new distro:")
+                platformLibsDiff.missingLibs.forEach { appendLine(it) }
             }
         }
         if (platformLibsDiff.newLibs.isNotEmpty()) {
             messageBuilder.apply {
-                appendln("Following platform libraries were added:")
-                platformLibsDiff.newLibs.forEach { appendln(it) }
+                appendLine("Following platform libraries were added:")
+                platformLibsDiff.newLibs.forEach { appendLine(it) }
             }
         }
         for ((new, old) in platformLibsDiff.remainingLibs) {
@@ -96,14 +96,14 @@ open class CompareDistributionSignatures : DefaultTask() {
 
     private fun reportMismatch(compareDiff: CompareDiff, klibName: String) {
         messageBuilder.apply {
-            appendln("Mismatch for $klibName:")
+            appendLine("Mismatch for $klibName:")
             if (compareDiff.oldKlibOnly.isNotEmpty()) {
-                appendln("Following signatures are missing in the new version:")
-                compareDiff.oldKlibOnly.forEach { appendln(it) }
+                appendLine("Following signatures are missing in the new version:")
+                compareDiff.oldKlibOnly.forEach { appendLine(it) }
             }
             if (compareDiff.newKlibOnly.isNotEmpty()) {
-                appendln("Following signatures were added:")
-                compareDiff.newKlibOnly.forEach { appendln(it) }
+                appendLine("Following signatures were added:")
+                compareDiff.newKlibOnly.forEach { appendLine(it) }
             }
         }
     }
