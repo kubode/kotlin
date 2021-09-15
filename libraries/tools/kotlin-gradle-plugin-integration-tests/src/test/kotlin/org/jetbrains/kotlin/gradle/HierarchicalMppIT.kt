@@ -211,6 +211,13 @@ class HierarchicalMppIT : BaseGradleIT() {
         }
     }
 
+    @Test
+    fun testMultiModulesHmpp() = with(Project("hierarchical-mpp-multi-modules", GradleVersionRequired.FOR_MPP_SUPPORT)) {
+        build("assemble", options = defaultBuildOptions().copy(parallelTasksInProject = true)) {
+            assertSuccessful()
+        }
+    }
+
     private fun publishThirdPartyLib(
         projectName: String = "third-party-lib",
         directoryPrefix: String = "hierarchical-mpp-published-modules",
