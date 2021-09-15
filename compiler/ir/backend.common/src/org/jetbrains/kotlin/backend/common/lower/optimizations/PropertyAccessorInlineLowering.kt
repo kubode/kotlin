@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrSetFieldImpl
 import org.jetbrains.kotlin.ir.util.deepCopyWithSymbols
 import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
 import org.jetbrains.kotlin.backend.common.ir.isPure
+import org.jetbrains.kotlin.ir.util.resolveFakeOverride
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
@@ -60,8 +61,8 @@ class PropertyAccessorInlineLowering(private val context: CommonBackendContext) 
             var analyzedProperty = property
             var analyzedCallee = callee
             while (analyzedProperty.isFakeOverride) {
-                analyzedProperty = analyzedProperty.overriddenSymbols.singleOrNull()?.owner ?: return expression
-                analyzedCallee = analyzedCallee.overriddenSymbols.singleOrNull()?.owner ?: return expression
+                analyzedProperty = analyzedProperty.resolveFakeOverride() ?: return expression
+                analyzedCallee = analyzedCallee.resolveFakeOverride() ?: return expression
             }
             assert(analyzedProperty == analyzedCallee.correspondingPropertySymbol?.owner)
 
